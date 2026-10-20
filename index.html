@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 手机适配，重点！ -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>种子识别</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif;}
+        body{background:#f7f7f7;padding:20px;max-width:420px;margin:0 auto;}
+        .box{background:#fff;border-radius:16px;padding:20px;}
+        .upload{border:2px dashed #ccc;border-radius:12px;padding:40px 10px;text-align:center;margin-bottom:16px;cursor:pointer;}
+        input{display:none;}
+        button{width:100%;background:#479c57;color:white;border:none;border-radius:12px;padding:14px;font-size:16px;margin-top:8px;}
+        #result{margin-top:20px;line-height:1.6}
+        .loading{color:#666;display:none;}
+    </style>
+</head>
+<body>
+    <div class="box">
+        <div class="upload" id="uploadArea">
+            <p>点击上传花朵照片</p >
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        <div class="loading" id="loading">识别中，请稍候...</div>
+        <div id="result"></div>
+    </div>
+
+<script>
+// =========【这里改成你的AK SK！！】=========
+const AK = "你的API Key";
+const SK = "你的Secret Key";
+// ==========================================
+const fileInput = document.getElementById('fileInput');
+const uploadArea = document.getElementById('uploadArea');
+const resultDom = document.getElementById('result');
+const loadingDom = document.getElementById('loading');
+
+uploadArea.onclick = ()=>fileInput.click();
+
+// 获取token
+async function getToken(){
+    const url = `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${AK}&client_secret=${SK}`
+    const res = await fetch(url);
+    const data = await res.json();
+    return data.access_token;
+}
+
+// 图片转base64
+function file2base64(file){
+    return new Promise((res)=>{
+        const r = new FileReader();
+        r.onload = e=>res(e.target.result.split(',')[1]);
+        r.readAsDataURL(file);
+    })
+}
+
+// 上传识别
+fileInput.onchange = async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    loadingDom.style.display = "block";
+    resultDom.innerHTML = "";
+    try{
+        const token = await getToken();
+        const base64 = await file2base64(file);
+        // 百度植物识别接口
+        const apiUrl = `https://aip.baidubce.com/rest/2.0/image-classify/v1/plant?access_token=${token}`
+        const fd = new URLSearchParams();
+        fd.append("image", base64);
+        fd.append("baike_num",1);
+        const resp = await fetch(apiUrl,{method:"POST",body:fd,headers:{"Content-Type":"application/x-www-form-urlencoded"}})
+        const json = await resp.json();
+        if(json.error_code){
+            resultDom.innerHTML = `<p style="color:red">识别失败：${json.error_msg}</p >`
+        }else{
+            let html = "";
+            json.result.forEach(item=>{
+                html += `<p>🌱 名称：${item.name}</p >`
+                html += `<p>可信度：${(item.score*100).toFixed(1)}%</p >`
+                if(item.baike_info?.description){
+                    html += `<p>简介：${item.baike_info.description.slice(0,120)}...</p >`
+                }
+            })
+            resultDom.innerHTML = html;
+        }
+    }catch(err){
+        resultDom.innerHTML = `<p style="color:red">跨域/网络错误，本地打开会报错！必须部署到github pages！</p >`
+    }
+    loadingDom.style.display = "none";
+}
+</script>
+</body>
+</html>
